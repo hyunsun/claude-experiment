@@ -1,4 +1,4 @@
-# claude-tutorials
+# claude experiments
 
 A hands-on comparison of how prompt quality affects AI-generated code.
 
@@ -47,6 +47,107 @@ Open **http://localhost:8082** to use the web UI.
 
 ---
 
+## Deploy to Kind (local cluster)
+
+This section covers building a Docker image, loading it into a local [Kind](https://kind.sigs.k8s.io/) cluster, and installing the operator with the Helm chart.
+
+### Additional prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/)
+- [`kind`](https://kind.sigs.k8s.io/docs/user/quick-start/#installation)
+- `helm` CLI
+
+### 1. Create a Kind cluster
+
+```bash
+kind create cluster --name helm-operator-demo
+```
+
+### 2. Build the Docker image
+
+```bash
+cd second
+docker build -t helm-operator:v0.1.0 .
+```
+
+### 3. Load the image into Kind
+
+Kind nodes cannot pull from the local Docker daemon automatically, so load the image directly:
+
+```bash
+kind load docker-image helm-operator:v0.1.0 --name helm-operator-demo
+```
+
+### 4. Install with Helm
+
+```bash
+helm install helm-operator ./chart \
+  --namespace helm-operator \
+  --create-namespace \
+  --set image.tag=v0.1.0
+```
+
+The chart applies the CRD first (from `chart/crds/`), then deploys the operator Deployment, ServiceAccount, ClusterRole, and ClusterRoleBinding.
+
+Verify the operator is running:
+
+```bash
+kubectl get pods -n helm-operator
+# NAME                             READY   STATUS    RESTARTS   AGE
+# helm-operator-7d9f6b8c4d-xq2pz   1/1     Running   0          30s
+```
+
+### 5. Access the web UI from your laptop
+
+```bash
+kubectl port-forward -n helm-operator svc/helm-operator-ui 8082:8082
+```
+
+Then open **http://localhost:8082**.
+
+---
+
+## Working Example — Deploy nginx via HelmRelease
+
+```bash
+kubectl create namespace demo
+
+kubectl apply -f - <<EOF
+apiVersion: helm.example.com/v1alpha1
+kind: HelmRelease
+metadata:
+  name: my-nginx
+  namespace: demo
+spec:
+  chart: nginx
+  repoURL: https://charts.bitnami.com/bitnami
+  version: "15.0.0"
+  targetNamespace: demo
+  values:
+    replicaCount: 1
+    service:
+      type: ClusterIP
+EOF
+```
+
+Watch the operator reconcile:
+
+```bash
+kubectl get hr -n demo -w
+# NAME       CHART   VERSION   NAMESPACE   PHASE        AGE
+# my-nginx   nginx   15.0.0    demo        Installing   2s
+# my-nginx   nginx   15.0.0    demo        Ready        14s
+```
+
+### Tear down
+
+```bash
+helm uninstall helm-operator -n helm-operator
+kind delete cluster --name helm-operator-demo
+```
+
+---
+
 ## Web UI
 
 The operator embeds a single-page UI served on `:8082`. No separate deployment is required.
@@ -76,131 +177,50 @@ go run ./main.go --leader-elect=false --ui-bind-address=:9090
 
 ## kubectl Usage
 
-### HelmRelease CRD fields
+### HelmRelease spec
 
 ```yaml
 apiVersion: helm.example.com/v1alpha1
 kind: HelmRelease
 metadata:
-  name: <release-name>       # also used as the Helm release name unless releaseName is set
+  name: <release-name>       # also the Helm release name unless releaseName is set
   namespace: <cr-namespace>  # namespace where this CR lives
 spec:
-  chart: <chart-name>        # required — Helm chart name (e.g. "nginx")
-  repoURL: <repo-url>        # required — Helm repo URL (e.g. "https://charts.bitnami.com/bitnami")
-  version: <chart-version>   # required — exact chart version (e.g. "15.0.0")
-  targetNamespace: <ns>      # required — Kubernetes namespace for the Helm release
+  chart: <chart-name>        # required
+  repoURL: <repo-url>        # required
+  version: <chart-version>   # required — exact semver (e.g. "15.0.0")
+  targetNamespace: <ns>      # required — where the Helm release is installed
   releaseName: <name>        # optional — overrides the Helm release name
-  values: {}                 # optional — arbitrary Helm values as a JSON/YAML object
+  values: {}                 # optional — arbitrary Helm values
 ```
 
-### Create a release
+### Command reference
 
 ```bash
-kubectl apply -f - <<EOF
-apiVersion: helm.example.com/v1alpha1
-kind: HelmRelease
-metadata:
-  name: my-nginx
-  namespace: default
-spec:
-  chart: nginx
-  repoURL: https://charts.bitnami.com/bitnami
-  version: "15.0.0"
-  targetNamespace: default
-  values:
-    replicaCount: 2
-    service:
-      type: ClusterIP
-EOF
-```
+# List (short alias: hr)
+kubectl get hr                                               # default namespace
+kubectl get hr -A                                            # all namespaces
+kubectl get hr -n demo -w                                    # watch for phase changes
 
-### List releases
+# Create / update
+kubectl apply -f helmrelease.yaml
 
-```bash
-kubectl get helmreleases          # or: kubectl get hr
-kubectl get hr -A                 # all namespaces
-```
+# Inspect
+kubectl describe hr my-nginx -n demo                         # phase, conditions, revision
+kubectl get hr my-nginx -n demo -o yaml                      # full resource
 
-Example output:
+# Upgrade — edit spec, operator reconciles automatically (Ready → Upgrading → Ready)
+kubectl patch hr my-nginx -n demo --type=merge -p '{"spec":{"version":"15.1.0"}}'
+kubectl edit hr my-nginx -n demo
 
-```
-NAME       CHART   VERSION   NAMESPACE   PHASE   AGE
-my-nginx   nginx   15.0.0    default     Ready   2m
-```
+# Delete — finalizer runs helm uninstall before CR is removed
+kubectl delete hr my-nginx -n demo
 
-### Inspect a release
+# Operator logs
+kubectl logs -n helm-operator -l app.kubernetes.io/name=helm-operator -f
 
-```bash
-kubectl describe hr my-nginx
-```
-
-Key status fields:
-
-```
-Status:
-  Phase:             Ready
-  Deployed Version:  15.0.0
-  Helm Revision:     1
-  Last Deployed At:  2026-02-19T10:00:00Z
-  Conditions:
-    Type:    Ready
-    Status:  True
-    Reason:  ReconcileSuccess
-```
-
-### Upgrade a release
-
-Edit the spec (e.g. bump the version or change values) and apply:
-
-```bash
-kubectl patch hr my-nginx --type=merge -p '{"spec":{"version":"15.1.0"}}'
-```
-
-Or edit interactively:
-
-```bash
-kubectl edit hr my-nginx
-```
-
-The operator detects the generation change and runs `helm upgrade` automatically. The phase transitions `Ready → Upgrading → Ready`.
-
-### Delete a release
-
-```bash
-kubectl delete hr my-nginx
-```
-
-The operator's finalizer (`helm.example.com/finalizer`) runs `helm uninstall` before the CR is removed, preventing orphaned Helm releases.
-
-### Watch reconciliation in real time
-
-```bash
-kubectl get hr -w
-```
-
-```
-NAME       CHART   VERSION   NAMESPACE   PHASE        AGE
-my-nginx   nginx   15.0.0    default     Installing   0s
-my-nginx   nginx   15.0.0    default     Ready        8s
-```
-
-### Common kubectl flags
-
-```bash
-# Short name alias
-kubectl get hr
-
-# Filter by namespace
-kubectl get hr -n production
-
-# Output full YAML
-kubectl get hr my-nginx -o yaml
-
-# Show events related to a release
-kubectl events --for helmrelease/my-nginx
-
-# Check operator logs
-kubectl logs -l control-plane=controller-manager -f
+# Events for a specific release
+kubectl events --for helmrelease/my-nginx -n demo
 ```
 
 ---
@@ -217,11 +237,25 @@ claude-tutorials/
 │   └── controllers/
 └── second/                       ← well-written-prompt version
     ├── PROMPT.md
+    ├── Dockerfile                ← multi-stage build (distroless runtime)
     ├── main.go                   ← operator entry point
     ├── Makefile
     ├── api/v1alpha1/
     │   ├── helmrelease_types.go  ← CRD schema
     │   └── zz_generated.deepcopy.go
+    ├── chart/                    ← Helm chart for deploying the operator
+    │   ├── Chart.yaml
+    │   ├── values.yaml
+    │   ├── crds/
+    │   │   └── helm.example.com_helmreleases.yaml
+    │   └── templates/
+    │       ├── _helpers.tpl
+    │       ├── serviceaccount.yaml
+    │       ├── clusterrole.yaml
+    │       ├── clusterrolebinding.yaml
+    │       ├── deployment.yaml
+    │       └── service.yaml
+    ├── config/crd/bases/         ← generated CRD (source of truth)
     ├── controllers/
     │   ├── helmrelease_controller.go  ← reconciler
     │   └── helmclient.go              ← Helm SDK wrapper
@@ -245,6 +279,7 @@ make generate     # regenerate DeepCopy methods
 make fmt          # gofmt
 make vet          # go vet
 make docker-build # build Docker image (IMG=helm-operator:latest)
+make docker-push  # push image to registry
 make install      # kubectl apply CRDs
 make deploy       # kubectl apply all manifests
 ```

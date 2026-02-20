@@ -1,0 +1,43 @@
+replicaCount: 1
+
+image:
+  repository: helm-operator
+  pullPolicy: IfNotPresent
+  # Overrides appVersion when set
+  tag: ""
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  # Defaults to the fullname if blank
+  name: ""
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 128Mi
+  requests:
+    cpu: 10m
+    memory: 64Mi
+
+metrics:
+  port: 8080
+
+healthProbe:
+  port: 8081
+
+webUI:
+  enabled: true
+  port: 8082
+
+leaderElection:
+  enabled: true
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

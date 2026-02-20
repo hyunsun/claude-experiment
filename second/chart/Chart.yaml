@@ -1,0 +1,6 @@
+apiVersion: v2
+name: helm-operator
+description: Kubernetes operator that manages Helm chart releases via HelmRelease CRs
+type: application
+version: 0.1.0
+appVersion: "latest"
