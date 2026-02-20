@@ -61,6 +61,10 @@ build: manifests generate fmt vet ## Build manager binary.
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./main.go
 
+.PHONY: run-ui
+run-ui: fmt vet ## Run manager with the web UI enabled (no leader election).
+	go run ./main.go --leader-elect=false --ui-bind-address=:8082
+
 .PHONY: docker-build
 docker-build: ## Build docker image with the manager.
 	docker build -t ${IMG} .
