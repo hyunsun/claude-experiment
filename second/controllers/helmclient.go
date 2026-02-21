@@ -100,9 +100,10 @@ func (h *HelmClient) Install(ctx context.Context, releaseName, chartName, repoUR
 	client.ReleaseName = releaseName
 	client.Namespace = namespace
 	client.Version = version
+	client.ChartPathOptions.RepoURL = repoURL
 
 	settings := cli.New()
-	chartPath, err := client.ChartPathOptions.LocateChart(fmt.Sprintf("%s/%s", repoURL, chartName), settings)
+	chartPath, err := client.ChartPathOptions.LocateChart(chartName, settings)
 	if err != nil {
 		return fmt.Errorf("locating chart: %w", err)
 	}
@@ -125,9 +126,10 @@ func (h *HelmClient) Upgrade(ctx context.Context, releaseName, chartName, repoUR
 	client := action.NewUpgrade(cfg)
 	client.Namespace = namespace
 	client.Version = version
+	client.ChartPathOptions.RepoURL = repoURL
 
 	settings := cli.New()
-	chartPath, err := client.ChartPathOptions.LocateChart(fmt.Sprintf("%s/%s", repoURL, chartName), settings)
+	chartPath, err := client.ChartPathOptions.LocateChart(chartName, settings)
 	if err != nil {
 		return fmt.Errorf("locating chart: %w", err)
 	}

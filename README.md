@@ -116,17 +116,15 @@ kubectl apply -f - <<EOF
 apiVersion: helm.example.com/v1alpha1
 kind: HelmRelease
 metadata:
-  name: my-nginx
+  name: my-podinfo
   namespace: demo
 spec:
-  chart: nginx
-  repoURL: https://charts.bitnami.com/bitnami
-  version: "15.0.0"
+  chart: podinfo
+  repoURL: https://stefanprodan.github.io/podinfo
+  version: "6.5.4"
   targetNamespace: demo
   values:
     replicaCount: 1
-    service:
-      type: ClusterIP
 EOF
 ```
 
@@ -134,9 +132,9 @@ Watch the operator reconcile:
 
 ```bash
 kubectl get hr -n demo -w
-# NAME       CHART   VERSION   NAMESPACE   PHASE        AGE
-# my-nginx   nginx   15.0.0    demo        Installing   2s
-# my-nginx   nginx   15.0.0    demo        Ready        14s
+# NAME          CHART     VERSION   NAMESPACE   PHASE        AGE
+# my-podinfo    podinfo   6.5.4     demo        Installing   2s
+# my-podinfo    podinfo   6.5.4     demo        Ready        14s
 ```
 
 ### Tear down
@@ -151,6 +149,8 @@ kind delete cluster --name helm-operator-demo
 ## Web UI
 
 The operator embeds a single-page UI served on `:8082`. No separate deployment is required.
+
+![Helm Operator Web UI](second/docs/ui-screenshot.png)
 
 ### Features
 
