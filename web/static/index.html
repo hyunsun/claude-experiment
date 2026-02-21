@@ -37,6 +37,7 @@
     .btn-secondary{ background: #e2e8f0; color: #333; }
     .btn-danger   { background: #e53e3e; color: white; }
     .btn-sm { padding: 0.3rem 0.65rem; font-size: 0.8rem; }
+    .btn-warning { background: #dd6b20; color: white; }
 
     .card { background: white; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); overflow: hidden; }
 
@@ -98,6 +99,20 @@
       font-size: 0.8rem; margin-top: 0.85rem;
     }
     #error-msg.show { display: block; }
+
+    #diag-panel {
+      display: none; position: fixed; bottom: 0; left: 0; right: 0;
+      background: #1a1a2e; color: #e2e8f0; padding: 1.25rem 1.5rem;
+      max-height: 40vh; overflow-y: auto; z-index: 200;
+      border-top: 3px solid #dd6b20; font-family: system-ui, sans-serif;
+    }
+    #diag-panel.open { display: block; }
+    #diag-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
+    #diag-title { font-weight: 600; font-size: 0.95rem; color: #fbd38d; }
+    #diag-close { cursor: pointer; background: none; border: none; color: #a0aec0; font-size: 1.2rem; line-height: 1; }
+    #diag-close:hover { color: white; }
+    #diag-body { font-size: 0.875rem; line-height: 1.6; white-space: pre-wrap; }
+    #diag-body.loading { color: #a0aec0; font-style: italic; }
   </style>
 </head>
 <body>
@@ -185,6 +200,15 @@
       </div>
     </form>
   </div>
+</div>
+
+<!-- Diagnosis Panel -->
+<div id="diag-panel">
+  <div id="diag-header">
+    <span id="diag-title">AI Diagnosis</span>
+    <button id="diag-close" onclick="closeDiag()">&#x2715;</button>
+  </div>
+  <div id="diag-body"></div>
 </div>
 
 <script>
@@ -280,6 +304,7 @@
           <div class="actions">
             <button class="btn btn-secondary btn-sm" onclick="openEdit('${k}')">Edit</button>
             <button class="btn btn-danger btn-sm" onclick="doDelete('${hr.metadata.name}', '${hr.metadata.namespace}')">Delete</button>
+            ${phase === 'Failed' ? `<button class="btn btn-warning btn-sm" onclick="doDiagnose('${hr.metadata.name}', '${hr.metadata.namespace}')">Diagnose</button>` : ''}
           </div>
         </td>`;
       tbody.appendChild(tr);
@@ -419,6 +444,58 @@
       renderTable();
     } catch (err) {
       alert(`Delete failed: ${err.message}`);
+    }
+  }
+
+  function closeDiag() {
+    document.getElementById('diag-panel').classList.remove('open');
+  }
+
+  async function doDiagnose(name, namespace) {
+    const panel = document.getElementById('diag-panel');
+    const body = document.getElementById('diag-body');
+    const title = document.getElementById('diag-title');
+
+    title.textContent = `AI Diagnosis — ${name}`;
+    body.textContent = 'Analysing failure…';
+    body.className = 'loading';
+    panel.classList.add('open');
+
+    try {
+      const params = new URLSearchParams({ name, ns: namespace });
+      const resp = await fetch(`/api/diagnose?${params}`, { method: 'POST' });
+      if (!resp.ok) {
+        body.className = '';
+        body.textContent = `Error: ${await resp.text()}`;
+        return;
+      }
+
+      body.className = '';
+      body.textContent = '';
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const ev = JSON.parse(line.slice(6));
+            if (ev.chunk) body.textContent += ev.chunk;
+            if (ev.error) { body.textContent = `Error: ${ev.error}`; return; }
+            if (ev.done) return;
+          } catch {}
+        }
+      }
+    } catch (err) {
+      body.className = '';
+      body.textContent = `Error: ${err.message}`;
     }
   }
 
