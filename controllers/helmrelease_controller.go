@@ -69,6 +69,17 @@ func (r *HelmReleaseReconciler) reconcileNormal(ctx context.Context, release *he
 		releaseName = release.Spec.ReleaseName
 	}
 
+	// If the release already failed for this generation of the spec, do not
+	// re-attempt the install immediately. A status update (e.g. from
+	// setFailedStatus) generates a new watch event that would otherwise cause
+	// an infinite tight reconcile loop. Wait for the requeue interval instead,
+	// so the Failed phase is stable and visible in the UI.
+	// A spec change increments generation and clears this gate automatically.
+	if release.Status.Phase == helmv1alpha1.PhaseFailed &&
+		release.Status.ObservedGeneration == release.Generation {
+		return ctrl.Result{RequeueAfter: requeueOnFailure}, nil
+	}
+
 	// Parse optional values.
 	values := map[string]interface{}{}
 	if release.Spec.Values != nil {
@@ -160,9 +171,14 @@ func (r *HelmReleaseReconciler) reconcileDelete(ctx context.Context, release *he
 	return ctrl.Result{}, nil
 }
 
-// setFailedStatus records a failure condition and returns the original error.
+// setFailedStatus records a failure condition and returns nil so callers can
+// return a non-zero RequeueAfter result without triggering the controller-runtime
+// warning about returning both a non-zero result and a non-nil error.
+// ObservedGeneration is set so that reconcileNormal can detect that a failure
+// has already been recorded for this generation and avoid a tight retry loop.
 func (r *HelmReleaseReconciler) setFailedStatus(ctx context.Context, release *helmv1alpha1.HelmRelease, err error) error {
 	release.Status.Phase = helmv1alpha1.PhaseFailed
+	release.Status.ObservedGeneration = release.Generation
 	setCondition(release, metav1.Condition{
 		Type:               "Ready",
 		Status:             metav1.ConditionFalse,
@@ -171,7 +187,7 @@ func (r *HelmReleaseReconciler) setFailedStatus(ctx context.Context, release *he
 		ObservedGeneration: release.Generation,
 	})
 	_ = r.Status().Update(ctx, release)
-	return err
+	return nil
 }
 
 // setCondition upserts a condition on the HelmRelease status.
