@@ -66,7 +66,7 @@ func (b *broker) broadcast(payload string) {
 
 // sseEvent wraps an event type and a HelmRelease resource into an SSE payload.
 type sseEvent struct {
-	Type     string                   `json:"type"`
+	Type     string                    `json:"type"`
 	Resource *helmv1alpha1.HelmRelease `json:"resource,omitempty"`
 }
 
