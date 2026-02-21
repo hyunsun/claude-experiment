@@ -171,9 +171,42 @@ kind delete cluster --name helm-operator-demo
 
 ---
 
+## Web UI
+
+The operator embeds a single-page UI served on `:8082`. No separate deployment is required.
+
+![Helm Release list view](docs/ui-screenshot-list.png)
+
+![Create new release modal](docs/ui-screenshot-create.png)
+
+### Features
+
+- **List** all `HelmRelease` resources across namespaces, with colour-coded phase badges
+- **Create** a new release via a modal form
+- **Edit** an existing release (chart, version, repo URL, values)
+- **Delete** a release (the operator's finalizer ensures the Helm release is also uninstalled)
+- **Live status updates** via Server-Sent Events — the table refreshes automatically as the operator reconciles changes
+- **Diagnose** a failed release — streams an AI explanation and suggested fix (requires `ANTHROPIC_API_KEY`)
+
+### Running with the UI
+
+```bash
+make run-ui          # equivalent to: go run ./main.go --leader-elect=false --ui-bind-address=:8082
+```
+
+To change the UI port:
+
+```bash
+go run ./main.go --leader-elect=false --ui-bind-address=:9090
+```
+
+---
+
 ## AI Diagnostics
 
 When a `HelmRelease` enters a `Failed` phase, a **Diagnose** button appears in the web UI. Clicking it sends the release's status conditions and Kubernetes events to Claude (claude-haiku-4-5), which streams back a plain-English explanation of the failure and a suggested fix.
+
+![AI diagnosis streaming panel](docs/ui-screenshot-diagnose.png)
 
 ### Prerequisites
 
@@ -221,37 +254,6 @@ EOF
 ```
 
 Version `0.0.0` does not exist, so the release will enter `Failed` phase within a few seconds. Open the web UI and click **Diagnose** on the `my-broken` row — Claude will stream a diagnosis explaining that the chart version was not found and suggest using a valid version.
-
----
-
-## Web UI
-
-The operator embeds a single-page UI served on `:8082`. No separate deployment is required.
-
-![Helm Release list view](docs/ui-screenshot-list.png)
-
-![Create new release modal](docs/ui-screenshot-create.png)
-
-### Features
-
-- **List** all `HelmRelease` resources across namespaces, with colour-coded phase badges
-- **Create** a new release via a modal form
-- **Edit** an existing release (chart, version, repo URL, values)
-- **Delete** a release (the operator's finalizer ensures the Helm release is also uninstalled)
-- **Live status updates** via Server-Sent Events — the table refreshes automatically as the operator reconciles changes
-- **Diagnose** a failed release — streams an AI explanation and suggested fix (requires `ANTHROPIC_API_KEY`)
-
-### Running with the UI
-
-```bash
-make run-ui          # equivalent to: go run ./main.go --leader-elect=false --ui-bind-address=:8082
-```
-
-To change the UI port:
-
-```bash
-go run ./main.go --leader-elect=false --ui-bind-address=:9090
-```
 
 ---
 
