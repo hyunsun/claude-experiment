@@ -278,8 +278,8 @@
         <td>${escHtml(deployedAt)}</td>
         <td>
           <div class="actions">
-            <button class="btn btn-secondary btn-sm" onclick="openEdit(${JSON.stringify(k)})">Edit</button>
-            <button class="btn btn-danger btn-sm" onclick="doDelete(${JSON.stringify(hr.metadata.name)}, ${JSON.stringify(hr.metadata.namespace)})">Delete</button>
+            <button class="btn btn-secondary btn-sm" onclick="openEdit('${k}')">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="doDelete('${hr.metadata.name}', '${hr.metadata.namespace}')">Delete</button>
           </div>
         </td>`;
       tbody.appendChild(tr);

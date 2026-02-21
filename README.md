@@ -150,7 +150,9 @@ kind delete cluster --name helm-operator-demo
 
 The operator embeds a single-page UI served on `:8082`. No separate deployment is required.
 
-![Helm Operator Web UI](second/docs/ui-screenshot.png)
+![Helm Release list view](second/docs/ui-screenshot-list.png)
+
+![Create new release modal](second/docs/ui-screenshot-create.png)
 
 ### Features
 
